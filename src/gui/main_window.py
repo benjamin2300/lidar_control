@@ -148,6 +148,23 @@ class MainWindow:
             command=self._start_scan
         )
         self.start_scan_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.pause_scan_btn = ttk.Button(
+            scan_frame,
+            text="暫停",
+            command=self._pause_scan,
+            state=tk.DISABLED
+        )
+        self.pause_scan_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.resume_scan_btn = ttk.Button(
+            scan_frame,
+            text="恢復",
+            command=self._resume_scan,
+            state=tk.DISABLED
+        )
+        self.resume_scan_btn.pack(side=tk.LEFT, padx=5)
+        
         self.stop_scan_btn = ttk.Button(
             scan_frame,
             text="停止掃描",
@@ -155,14 +172,32 @@ class MainWindow:
         )
         self.stop_scan_btn.pack(side=tk.LEFT, padx=5)
         
-        # 新增：保存數據按鈕
-        self.save_data_btn = ttk.Button(
-            scan_frame,
-            text="保存數據",
-            command=self._save_scan_data,
+        # 點雲數據控制
+        cloud_frame = ttk.Frame(control_frame)
+        cloud_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        self.save_cloud_btn = ttk.Button(
+            cloud_frame,
+            text="保存當前點雲",
+            command=self._save_current_cloud,
             state=tk.DISABLED
         )
-        self.save_data_btn.pack(side=tk.LEFT, padx=5)
+        self.save_cloud_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.load_cloud_btn = ttk.Button(
+            cloud_frame,
+            text="載入點雲",
+            command=self._load_cloud
+        )
+        self.load_cloud_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.clear_loaded_btn = ttk.Button(
+            cloud_frame,
+            text="清除載入",
+            command=self._clear_loaded_cloud,
+            state=tk.DISABLED
+        )
+        self.clear_loaded_btn.pack(side=tk.LEFT, padx=5)
     
     def _create_visualization_panel(self) -> None:
         """創建可視化面板"""
@@ -201,10 +236,11 @@ class MainWindow:
         self.ax1.set_zlabel('Z (m)')
         self.ax2.set_title("2D投影")
         
+        # 使用新的方法獲取要顯示的點雲數據
+        data = self.processor.get_display_point_cloud()
+        
         # 如果有數據，繪製點雲
-        if self.processor.current_frame is not None:
-            data = self.processor.current_frame
-            
+        if data is not None:
             if data.shape[1] >= 6:
                 # 真實掃描數據，直接用XYZ - 設置較小的點大小
                 self.ax1.scatter(data[:, 0], data[:, 1], data[:, 2], c=data[:, 3], cmap='viridis', s=0.5)
@@ -470,42 +506,90 @@ class MainWindow:
     
     def _start_scan(self) -> None:
         """開始掃描"""
-        # 開始數據收集
-        self.processor.start_scan_data_collection()
+        # 清除載入的點雲數據
+        self.processor.clear_loaded_point_cloud()
+        
         self.controller.start_data_transmission()
         self._log_message("[指令] 已發送開始掃描指令 (start_data_transmission)")
-        self._log_message("[數據收集] 開始收集掃描數據")
         
         # 更新按鈕狀態
         self.start_scan_btn.config(state=tk.DISABLED)
+        self.pause_scan_btn.config(state=tk.NORMAL)
+        self.resume_scan_btn.config(state=tk.DISABLED)
         self.stop_scan_btn.config(state=tk.NORMAL)
-        self.save_data_btn.config(state=tk.DISABLED)  # 掃描時禁用保存按鈕
+        self.save_cloud_btn.config(state=tk.DISABLED)
+        self.clear_loaded_btn.config(state=tk.DISABLED)
+
+    def _pause_scan(self) -> None:
+        """暫停掃描"""
+        self.processor.pause_scanning()
+        self._log_message("[暫停] 掃描已暫停")
+        
+        # 更新按鈕狀態
+        self.pause_scan_btn.config(state=tk.DISABLED)
+        self.resume_scan_btn.config(state=tk.NORMAL)
+        self.save_cloud_btn.config(state=tk.NORMAL)  # 暫停時可以保存當前點雲
+
+    def _resume_scan(self) -> None:
+        """恢復掃描"""
+        self.processor.resume_scanning()
+        self._log_message("[恢復] 掃描已恢復")
+        
+        # 更新按鈕狀態
+        self.pause_scan_btn.config(state=tk.NORMAL)
+        self.resume_scan_btn.config(state=tk.DISABLED)
+        self.save_cloud_btn.config(state=tk.DISABLED)  # 恢復掃描時不能保存
 
     def _stop_scan(self) -> None:
         """停止掃描"""
         self.controller.stop_data_transmission()
-        self.processor.stop_scan_data_collection()
+        self.processor.resume_scanning()  # 確保狀態重置
         self._log_message("掃描已停止")
         
         # 更新按鈕狀態
         self.start_scan_btn.config(state=tk.NORMAL)
+        self.pause_scan_btn.config(state=tk.DISABLED)
+        self.resume_scan_btn.config(state=tk.DISABLED)
         self.stop_scan_btn.config(state=tk.DISABLED)
-        # 如果有掃描數據則啟用保存按鈕
-        if self.processor.scan_data:
-            self.save_data_btn.config(state=tk.NORMAL)
-        else:
-            self.save_data_btn.config(state=tk.DISABLED)
-    
+        self.save_cloud_btn.config(state=tk.DISABLED)
+        self.load_cloud_btn.config(state=tk.NORMAL)  # 停止後可以載入點雲
+
     def _change_power(self, value) -> None:
         pass  # 移除雷射功率調整功能
     
     def _save_data(self) -> None:
-        """保存數據"""
-        filename = self.processor.save_buffer()
-        if filename:
-            self._log_message(f"數據已保存到: {filename}")
-        else:
-            messagebox.showwarning("警告", "沒有可保存的數據")
+        """保存當前點雲數據"""
+        try:
+            # 如果正在掃描但未暫停，提示需要先暫停
+            if self.processor.current_frame is not None and not self.processor.is_paused:
+                result = messagebox.askyesno(
+                    "確認保存", 
+                    "掃描正在進行中，建議先暫停再保存。\n是否繼續保存當前點雲數據？"
+                )
+                if not result:
+                    return
+            
+            if self.processor.current_frame is None:
+                messagebox.showwarning("警告", "沒有當前點雲數據可保存")
+                return
+            
+            # 臨時設置暫停狀態以允許保存
+            was_paused = self.processor.is_paused
+            if not was_paused:
+                self.processor.is_paused = True
+            
+            try:
+                filename = self.processor.save_current_point_cloud()
+                self._log_message(f"當前點雲已保存到: {filename}")
+                messagebox.showinfo("保存成功", f"當前點雲已保存到:\n{filename}")
+            finally:
+                # 恢復原始暫停狀態
+                if not was_paused:
+                    self.processor.is_paused = False
+                    
+        except Exception as e:
+            self._log_message(f"保存錯誤: {e}")
+            messagebox.showerror("保存錯誤", f"保存時發生錯誤:\n{e}")
     
     def _export_report(self) -> None:
         """導出報告"""
@@ -536,10 +620,12 @@ class MainWindow:
             "使用說明",
             "LiDAR控制系統使用說明：\n\n"
             "1. 首先點擊'連接'按鈕連接設備\n"
-            "2. 選擇系統模式（待機/掃描/校準）\n"
-            "3. 使用控制面板調整參數\n"
-            "4. 開始掃描後可以查看實時數據\n"
-            "5. 可以隨時保存數據或導出報告"
+            "2. 點擊'開始掃描'開始實時掃描\n"
+            "3. 掃描過程中可以點擊'暫停'查看當前點雲\n"
+            "4. 暫停時可以點擊'保存當前點雲'保存數據\n"
+            "5. 點擊'恢復'繼續掃描或'停止掃描'結束\n"
+            "6. 停止後可以'載入點雲'查看之前保存的數據\n"
+            "7. 可以隨時導出系統報告"
         )
     
     def _show_about(self) -> None:
@@ -656,17 +742,47 @@ class MainWindow:
         ttk.Button(button_frame, text="應用", command=apply_custom).pack(side=tk.RIGHT, padx=5)
         ttk.Button(button_frame, text="取消", command=custom_window.destroy).pack(side=tk.RIGHT)
 
-    def _save_scan_data(self) -> None:
-        """保存掃描數據為JSON格式"""
+    def _save_current_cloud(self) -> None:
+        """保存當前點雲數據"""
         try:
-            filename = self.processor.save_scan_data_as_json()
-            self._log_message(f"掃描數據已保存到: {filename}")
-            messagebox.showinfo("保存成功", f"掃描數據已保存到:\n{filename}")
-            # 保存後禁用按鈕
-            self.save_data_btn.config(state=tk.DISABLED)
+            filename = self.processor.save_current_point_cloud()
+            self._log_message(f"當前點雲已保存到: {filename}")
+            messagebox.showinfo("保存成功", f"當前點雲已保存到:\n{filename}")
         except ValueError as e:
             self._log_message(f"保存失敗: {e}")
             messagebox.showwarning("保存失敗", str(e))
         except Exception as e:
             self._log_message(f"保存錯誤: {e}")
-            messagebox.showerror("保存錯誤", f"保存時發生錯誤:\n{e}") 
+            messagebox.showerror("保存錯誤", f"保存時發生錯誤:\n{e}")
+
+    def _load_cloud(self) -> None:
+        """載入點雲數據"""
+        from tkinter import filedialog
+        
+        filename = filedialog.askopenfilename(
+            title="選擇要載入的點雲文件",
+            initialdir="data/saved_clouds",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        
+        if filename:
+            try:
+                self.processor.load_point_cloud(filename)
+                self._log_message(f"已載入點雲數據: {filename}")
+                messagebox.showinfo("載入成功", f"已載入點雲數據:\n{filename}")
+                self.clear_loaded_btn.config(state=tk.NORMAL)
+                # 更新顯示
+                self._update_visualization()
+                self.canvas.draw()
+            except Exception as e:
+                self._log_message(f"載入錯誤: {e}")
+                messagebox.showerror("載入錯誤", f"載入時發生錯誤:\n{e}")
+
+    def _clear_loaded_cloud(self) -> None:
+        """清除載入的點雲數據"""
+        self.processor.clear_loaded_point_cloud()
+        self._log_message("已清除載入的點雲數據")
+        self.clear_loaded_btn.config(state=tk.DISABLED)
+        # 更新顯示
+        self._update_visualization()
+        self.canvas.draw() 
