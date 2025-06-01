@@ -218,6 +218,11 @@ class LidarController:
         params = start_angle.to_bytes(2, 'big') + end_angle.to_bytes(2, 'big')
         self.send_command(0x40, params)
     
+    def set_vertical_scan_range(self, start_angle: int, end_angle: int) -> None:
+        """設定垂直掃描範圍 (0x41)"""
+        params = start_angle.to_bytes(2, 'big') + end_angle.to_bytes(2, 'big')
+        self.send_command(0x41, params)
+    
     def set_laser_power(self, power: int) -> None:
         """設定雷射功率 (0x51)"""
         self.send_command(0x51, bytes([power]))

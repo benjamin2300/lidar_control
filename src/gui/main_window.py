@@ -46,6 +46,10 @@ class MainWindow:
         self.z_range = [-5, 15]   # Z軸範圍 (米)
         self.auto_adjust_range = False  # 是否根據數據自動調整範圍一次
         
+        # 角度範圍設定
+        self.horizontal_range = [-30, 30]  # 水平角度範圍 (度)
+        self.vertical_range = [-15, 15]    # 垂直角度範圍 (度)
+        
         # 創建主框架
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -139,38 +143,35 @@ class MainWindow:
         self.scale_status_label = ttk.Label(conn_frame, text="固定比例尺: 開啟", foreground="green")
         self.scale_status_label.pack(side=tk.LEFT, padx=5)
         
-        # 掃描控制
-        scan_frame = ttk.Frame(control_frame)
-        scan_frame.pack(fill=tk.X, padx=5, pady=2)
-        self.start_scan_btn = ttk.Button(
-            scan_frame,
-            text="開始掃描",
-            command=self._start_scan
-        )
-        self.start_scan_btn.pack(side=tk.LEFT, padx=5)
+        # 掃描控制區域
+        scan_frame = ttk.LabelFrame(control_frame, text="掃描控制", padding=10)
+        scan_frame.pack(fill=tk.X, pady=5)
         
-        self.pause_scan_btn = ttk.Button(
-            scan_frame,
-            text="暫停",
-            command=self._pause_scan,
-            state=tk.DISABLED
-        )
-        self.pause_scan_btn.pack(side=tk.LEFT, padx=5)
+        # 掃描按鈕
+        button_frame1 = ttk.Frame(scan_frame)
+        button_frame1.pack(fill=tk.X, pady=2)
         
-        self.resume_scan_btn = ttk.Button(
-            scan_frame,
-            text="恢復",
-            command=self._resume_scan,
-            state=tk.DISABLED
-        )
-        self.resume_scan_btn.pack(side=tk.LEFT, padx=5)
+        self.start_scan_btn = ttk.Button(button_frame1, text="開始掃描", command=self._start_scan)
+        self.start_scan_btn.pack(side=tk.LEFT, padx=2)
         
-        self.stop_scan_btn = ttk.Button(
-            scan_frame,
-            text="停止掃描",
-            command=self._stop_scan
-        )
-        self.stop_scan_btn.pack(side=tk.LEFT, padx=5)
+        self.pause_scan_btn = ttk.Button(button_frame1, text="暫停", command=self._pause_scan)
+        self.pause_scan_btn.pack(side=tk.LEFT, padx=2)
+        self.pause_scan_btn.config(state=tk.DISABLED)
+        
+        self.resume_scan_btn = ttk.Button(button_frame1, text="恢復", command=self._resume_scan)
+        self.resume_scan_btn.pack(side=tk.LEFT, padx=2)
+        self.resume_scan_btn.config(state=tk.DISABLED)
+        
+        self.stop_scan_btn = ttk.Button(button_frame1, text="停止掃描", command=self._stop_scan)
+        self.stop_scan_btn.pack(side=tk.LEFT, padx=2)
+        self.stop_scan_btn.config(state=tk.DISABLED)
+        
+        # 角度設定按鈕
+        button_frame2 = ttk.Frame(scan_frame)
+        button_frame2.pack(fill=tk.X, pady=2)
+        
+        ttk.Button(button_frame2, text="設定角度範圍", command=self._set_angle_ranges).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame2, text="重置為預設角度", command=self._reset_angle_ranges).pack(side=tk.LEFT, padx=2)
         
         # 點雲數據控制
         cloud_frame = ttk.Frame(control_frame)
@@ -785,4 +786,90 @@ class MainWindow:
         self.clear_loaded_btn.config(state=tk.DISABLED)
         # 更新顯示
         self._update_visualization()
-        self.canvas.draw() 
+        self.canvas.draw()
+
+    def _set_angle_ranges(self):
+        """顯示角度範圍設置對話框"""
+        angle_window = tk.Toplevel(self.root)
+        angle_window.title("角度範圍設置")
+        angle_window.geometry("300x200")
+        angle_window.resizable(False, False)
+        angle_window.transient(self.root)
+        angle_window.grab_set()
+        
+        # 角度輸入
+        main_frame = ttk.LabelFrame(angle_window, text="輸入角度範圍")
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # 水平角度範圍
+        horizontal_frame = ttk.Frame(main_frame)
+        horizontal_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Label(horizontal_frame, text="水平角度範圍:").pack(side=tk.LEFT)
+        self.horizontal_min_var = tk.DoubleVar(value=-30)
+        self.horizontal_max_var = tk.DoubleVar(value=30)
+        ttk.Entry(horizontal_frame, textvariable=self.horizontal_min_var, width=8).pack(side=tk.LEFT, padx=(10,2))
+        ttk.Label(horizontal_frame, text="到").pack(side=tk.LEFT, padx=2)
+        ttk.Entry(horizontal_frame, textvariable=self.horizontal_max_var, width=8).pack(side=tk.LEFT, padx=2)
+        
+        # 垂直角度範圍
+        vertical_frame = ttk.Frame(main_frame)
+        vertical_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Label(vertical_frame, text="垂直角度範圍:").pack(side=tk.LEFT)
+        self.vertical_min_var = tk.DoubleVar(value=-15)
+        self.vertical_max_var = tk.DoubleVar(value=15)
+        ttk.Entry(vertical_frame, textvariable=self.vertical_min_var, width=8).pack(side=tk.LEFT, padx=(10,2))
+        ttk.Label(vertical_frame, text="到").pack(side=tk.LEFT, padx=2)
+        ttk.Entry(vertical_frame, textvariable=self.vertical_max_var, width=8).pack(side=tk.LEFT, padx=2)
+        
+        # 說明
+        info_frame = ttk.Frame(main_frame)
+        info_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Label(info_frame, text="水平角度範圍將設為 ±水平角度/2", font=('Arial', 8)).pack()
+        ttk.Label(info_frame, text="垂直角度範圍將設為 0 到 垂直角度", font=('Arial', 8)).pack()
+        
+        # 按鈕
+        button_frame = ttk.Frame(angle_window)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        def apply_angle_ranges():
+            self.horizontal_range = [self.horizontal_min_var.get(), self.horizontal_max_var.get()]
+            self.vertical_range = [self.vertical_min_var.get(), self.vertical_max_var.get()]
+            
+            # 發送角度設定指令到硬體（角度單位需要轉換為0.1度）
+            try:
+                h_start = int(self.horizontal_range[0] * 10)  # 轉換為0.1度單位
+                h_end = int(self.horizontal_range[1] * 10)
+                v_start = int(self.vertical_range[0] * 10)
+                v_end = int(self.vertical_range[1] * 10)
+                
+                self.controller.set_scan_range(h_start, h_end)  # 設定水平掃描範圍
+                self.controller.set_vertical_scan_range(v_start, v_end)  # 設定垂直掃描範圍
+                
+                self._log_message(f"[角度設定] 水平: {self.horizontal_range[0]}° 到 {self.horizontal_range[1]}°")
+                self._log_message(f"[角度設定] 垂直: {self.vertical_range[0]}° 到 {self.vertical_range[1]}°")
+                
+            except Exception as e:
+                self._log_message(f"[角度設定錯誤] {e}")
+            
+            angle_window.destroy()
+        
+        ttk.Button(button_frame, text="應用", command=apply_angle_ranges).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="取消", command=angle_window.destroy).pack(side=tk.RIGHT)
+
+    def _reset_angle_ranges(self):
+        """重置為預設角度範圍"""
+        self.horizontal_range = [-30, 30]
+        self.vertical_range = [-15, 15]
+        
+        # 發送重置角度設定指令到硬體
+        try:
+            self.controller.set_scan_range(-300, 300)  # 水平: -30° 到 +30° (單位0.1度)
+            self.controller.set_vertical_scan_range(-150, 150)  # 垂直: -15° 到 +15° (單位0.1度)
+            
+            self._log_message("[角度重置] 水平角度重置為 -30° 到 +30°")
+            self._log_message("[角度重置] 垂直角度重置為 -15° 到 +15°")
+            
+        except Exception as e:
+            self._log_message(f"[角度重置錯誤] {e}")
+        
+        self._update_visualization() 
