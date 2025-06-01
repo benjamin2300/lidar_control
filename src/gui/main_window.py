@@ -206,19 +206,19 @@ class MainWindow:
             data = self.processor.current_frame
             
             if data.shape[1] >= 6:
-                # 真實掃描數據，直接用XYZ
-                self.ax1.scatter(data[:, 0], data[:, 1], data[:, 2], c=data[:, 3], cmap='viridis')
-                self.ax2.scatter(data[:, 0], data[:, 1], c=data[:, 3], cmap='viridis')
+                # 真實掃描數據，直接用XYZ - 設置較小的點大小
+                self.ax1.scatter(data[:, 0], data[:, 1], data[:, 2], c=data[:, 3], cmap='viridis', s=0.5)
+                self.ax2.scatter(data[:, 0], data[:, 1], c=data[:, 3], cmap='viridis', s=0.5)
             else:
-                # 舊的測試數據，極座標轉換
+                # 舊的測試數據，極座標轉換 - 設置較小的點大小
                 self.ax1.scatter(
                     data[:, 0] * np.cos(data[:, 1]),
                     data[:, 0] * np.sin(data[:, 1]),
-                    data[:, 2], c=data[:, 3], cmap='viridis')
+                    data[:, 2], c=data[:, 3], cmap='viridis', s=0.5)
                 self.ax2.scatter(
                     data[:, 0] * np.cos(data[:, 1]),
                     data[:, 0] * np.sin(data[:, 1]),
-                    c=data[:, 3], cmap='viridis')
+                    c=data[:, 3], cmap='viridis', s=0.5)
         else:
             # 沒有數據時，顯示提示信息
             if self.fixed_scale_enabled:
