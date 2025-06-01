@@ -1,0 +1,22 @@
+# Basic Development Tools
+pytest==7.4.3
+black==23.11.0
+flake8==6.1.0
+python-dotenv==1.0.0
+
+# GUI Related
+ttkthemes==3.2.2
+pillow==10.0.0  # For image processing
+
+# Data Processing
+numpy==1.24.3
+pandas==2.1.1
+matplotlib==3.8.0
+open3d==0.17.0  # For 3D point cloud visualization
+
+# Other Tools
+requests==2.31.0
+tqdm==4.66.1
+tkcalendar==1.6.1  # For date selection
+keyboard==0.13.5  # For keyboard event monitoring
+pyinstaller==6.3.0  # For packaging to exe 

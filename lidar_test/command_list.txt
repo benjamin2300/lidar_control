@@ -1,0 +1,44 @@
+_/_/_/_/_/_/_/_/_/_/_/_/ Debug Command List \_\_\_\_\_\_\_\_\_\_\_\_
+
+help            Show all command
+apddc           Set APD DC level                apddc [mv]
+apdhv           Set APD level                   apdhv [mv]
+fire            Laser firing                    fire [cnt]
+stopfire                Stop forever fire                       stopfire
+getid           Echo prject name                getid
+sh.rxohm        Show rx ohm information         sh.rxohm
+tmp             Get environment temperature     tmp
+pack.demo       Packet data send test           pack.demo
+setdac5321              setdac5321 [value]
+readdist                readdist [addr] [size]
+readldbuf               readldbuf [addr] [size]
+readstepbuf             readreadstepbuf [addr] [size]
+readcmd         readcmd [id] [addr] [size], id:0,1,2,3 => A,B,C,D
+readtdc         readtdc [id] [addr] [size], id:0,1,2,3 => A,B,C,D
+setstepvref             startbldc [value]
+startbldc               startbldc [dir] [speed], dir=0 or 1, speed=100~2000
+stopbldc                stopbldc
+stepup          stepup [speed] [value]
+stepdown                stepdown [speed] [value]
+stephomeup              stephomeup
+stephomedown            stephomedown
+writestepbuf            writestepbuf
+scanxy          Start to scan or stop scanning. scanxy [state], state = 0/1 ==> stop/start
+getencoderxvalue                Get encoder value of the BLDC.  getencoderxvalue
+showpolygon             Show parameters of the polygon. showpolygon
+setpolygonparam         Set parameters of the polygon.  setpolygonparam [laser start] [laser stop] [zero position]
+savelidarparam          Save lidar parameters.  savelidarparam
+setapd          Set parameter of the APD.       setapd [Typical_HV] [Temp Coeff] [topHV] [bottomHV]
+showapd         Show information about APD.     showapd
+setbldcspeed            Set the speed of the BLDC.      setbldcspeed [speed]
+showbldcspeed           Show the setting speed of the BLDC.     showbldcspeed
+shownowspeed            Show the real speed of the BLDC.        shownowspeed
+changeshowtype          changeshowtype [type], 0:both,1:t2b,2:b2t
+setmyipaddr             Set IP address for lidar.       setmyipaddr [192] [168] [2] [8]
+setmynetmask            Set sub-network mask for lidar. setmynetmask [255] [255] [255] [0]
+setmygateway            Set gateway for lidar.  setmygateway [0] [0] [0] [0]
+showeth         Show all of Etherent information        showeth
+setstopmask             Set stop mask.  setstopmask [state]
+showstopmask            Show stop mask setting. showstopmask
+setechonum              Set which echo to be shown.     setechonum
+setsteptop              Set step motor top position.    setsteptop
