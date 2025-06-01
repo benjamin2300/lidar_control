@@ -154,6 +154,15 @@ class MainWindow:
             command=self._stop_scan
         )
         self.stop_scan_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 新增：保存數據按鈕
+        self.save_data_btn = ttk.Button(
+            scan_frame,
+            text="保存數據",
+            command=self._save_scan_data,
+            state=tk.DISABLED
+        )
+        self.save_data_btn.pack(side=tk.LEFT, padx=5)
     
     def _create_visualization_panel(self) -> None:
         """創建可視化面板"""
@@ -461,13 +470,31 @@ class MainWindow:
     
     def _start_scan(self) -> None:
         """開始掃描"""
+        # 開始數據收集
+        self.processor.start_scan_data_collection()
         self.controller.start_data_transmission()
         self._log_message("[指令] 已發送開始掃描指令 (start_data_transmission)")
-    
+        self._log_message("[數據收集] 開始收集掃描數據")
+        
+        # 更新按鈕狀態
+        self.start_scan_btn.config(state=tk.DISABLED)
+        self.stop_scan_btn.config(state=tk.NORMAL)
+        self.save_data_btn.config(state=tk.DISABLED)  # 掃描時禁用保存按鈕
+
     def _stop_scan(self) -> None:
         """停止掃描"""
         self.controller.stop_data_transmission()
+        self.processor.stop_scan_data_collection()
         self._log_message("掃描已停止")
+        
+        # 更新按鈕狀態
+        self.start_scan_btn.config(state=tk.NORMAL)
+        self.stop_scan_btn.config(state=tk.DISABLED)
+        # 如果有掃描數據則啟用保存按鈕
+        if self.processor.scan_data:
+            self.save_data_btn.config(state=tk.NORMAL)
+        else:
+            self.save_data_btn.config(state=tk.DISABLED)
     
     def _change_power(self, value) -> None:
         pass  # 移除雷射功率調整功能
@@ -627,4 +654,19 @@ class MainWindow:
             custom_window.destroy()
         
         ttk.Button(button_frame, text="應用", command=apply_custom).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(button_frame, text="取消", command=custom_window.destroy).pack(side=tk.RIGHT) 
+        ttk.Button(button_frame, text="取消", command=custom_window.destroy).pack(side=tk.RIGHT)
+
+    def _save_scan_data(self) -> None:
+        """保存掃描數據為JSON格式"""
+        try:
+            filename = self.processor.save_scan_data_as_json()
+            self._log_message(f"掃描數據已保存到: {filename}")
+            messagebox.showinfo("保存成功", f"掃描數據已保存到:\n{filename}")
+            # 保存後禁用按鈕
+            self.save_data_btn.config(state=tk.DISABLED)
+        except ValueError as e:
+            self._log_message(f"保存失敗: {e}")
+            messagebox.showwarning("保存失敗", str(e))
+        except Exception as e:
+            self._log_message(f"保存錯誤: {e}")
+            messagebox.showerror("保存錯誤", f"保存時發生錯誤:\n{e}") 

@@ -11,6 +11,7 @@ class LidarController:
         self.connected: bool = False
         self.local_addr: Tuple[str, int] = ("", 0)
         self.remote_addr: Tuple[str, int] = ("", 0)
+        self.data_port: int = 8881  # 新增：數據端口配置
         self.rx_thread: Optional[threading.Thread] = None
         self.tx_thread: Optional[threading.Thread] = None
         self.rx_running: bool = False
@@ -32,24 +33,28 @@ class LidarController:
     def load_config(self) -> None:
         """載入網路配置"""
         try:
-            with open('config/network_config.json', 'r') as f:
+            # 使用已存在的 etherInform.json 配置文件
+            with open('etherInform.json', 'r') as f:
                 config = json.load(f)
-                self.local_addr = (config['local_ip'], config['local_port'])
-                self.remote_addr = (config['remote_ip'], config['remote_port'])
+                self.local_addr = (config['localIP'], config['port'])
+                self.remote_addr = (config['remoteIP'], config['port'])
+                # 讀取數據端口配置，如果不存在則使用默認值8881
+                self.data_port = config.get('dataPort', 8881)
         except FileNotFoundError:
             # 使用預設配置
             self.local_addr = ("192.168.2.194", 8880)
             self.remote_addr = ("192.168.2.10", 8880)
+            self.data_port = 8881
     
     def save_config(self) -> None:
-        """保存網路配置"""
+        """保存網路配置到 etherInform.json"""
         config = {
-            'local_ip': self.local_addr[0],
-            'local_port': self.local_addr[1],
-            'remote_ip': self.remote_addr[0],
-            'remote_port': self.remote_addr[1]
+            'localIP': self.local_addr[0],
+            'remoteIP': self.remote_addr[0],
+            'port': self.local_addr[1],  # 控制端口
+            'dataPort': self.data_port   # 數據端口
         }
-        with open('config/network_config.json', 'w') as f:
+        with open('etherInform.json', 'w') as f:
             json.dump(config, f, indent=4)
     
     def connect(self) -> bool:
@@ -62,10 +67,10 @@ class LidarController:
             self.connected = True
             self.start_rx_thread()
             # 新增數據socket
-            print(f"[DEBUG] 嘗試綁定數據端口: ({self.local_addr[0]}, 8881)")
+            print(f"[DEBUG] 嘗試綁定數據端口: ({self.local_addr[0]}, {self.data_port})")
             self.data_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.data_socket.bind((self.local_addr[0], 8881))
-            print(f"[綁定成功] 數據端口: ({self.local_addr[0]}, 8881)")
+            self.data_socket.bind((self.local_addr[0], self.data_port))
+            print(f"[綁定成功] 數據端口: ({self.local_addr[0]}, {self.data_port})")
             self.data_rx_running = True
             self.data_rx_thread = threading.Thread(target=self._data_rx_loop)
             self.data_rx_thread.daemon = True
