@@ -26,6 +26,7 @@ matplotlib.rcParams['axes.unicode_minus'] = False
 from src.controller.lidar_controller import LidarController
 from src.data.data_processor import LidarDataProcessor
 from src.monitor.system_monitor import LidarMonitor
+from src.data.color_mapper import DistanceColorMapper
 
 class MainWindow:
     def __init__(self, root: ThemedTk, controller: LidarController, 
@@ -45,6 +46,12 @@ class MainWindow:
         self.y_range = [-10, 10]  # Y軸範圍 (米)
         self.z_range = [-5, 15]   # Z軸範圍 (米)
         self.auto_adjust_range = False  # 是否根據數據自動調整範圍一次
+        
+        # 點雲顯示設定
+        self.point_size = 0.5  # 點雲大小設定
+        
+        # 初始化距離顏色映射器
+        self.color_mapper = DistanceColorMapper()
         
         # 角度範圍設定
         self.horizontal_range = [-30, 30]  # 水平角度範圍 (度)
@@ -95,6 +102,7 @@ class MainWindow:
         settings_menu.add_command(label="數據格式", command=self._show_data_format_settings)
         settings_menu.add_separator()
         settings_menu.add_command(label="3D視圖設置", command=self._show_3d_view_settings)
+        settings_menu.add_command(label="顏色映射設置", command=self._show_color_mapping_settings)
         
         # 幫助菜單
         help_menu = tk.Menu(menubar, tearoff=0)
@@ -143,6 +151,10 @@ class MainWindow:
         self.scale_status_label = ttk.Label(conn_frame, text="固定比例尺: 開啟", foreground="green")
         self.scale_status_label.pack(side=tk.LEFT, padx=5)
         
+        # 動態顏色比例尺控制
+        color_scale_btn = ttk.Button(conn_frame, text="顏色比例尺設定", command=self._show_color_scale_dialog)
+        color_scale_btn.pack(side=tk.LEFT, padx=5)
+        
         # 掃描控制區域
         scan_frame = ttk.LabelFrame(control_frame, text="掃描控制", padding=10)
         scan_frame.pack(fill=tk.X, pady=5)
@@ -172,6 +184,42 @@ class MainWindow:
         
         ttk.Button(button_frame2, text="設定角度範圍", command=self._set_angle_ranges).pack(side=tk.LEFT, padx=2)
         ttk.Button(button_frame2, text="重置為預設角度", command=self._reset_angle_ranges).pack(side=tk.LEFT, padx=2)
+        
+        # 點雲顯示控制區域
+        display_frame = ttk.LabelFrame(control_frame, text="點雲顯示控制", padding=5)
+        display_frame.pack(fill=tk.X, pady=5)
+        
+        # 點雲大小實時調整
+        size_control_frame = ttk.Frame(display_frame)
+        size_control_frame.pack(fill=tk.X, padx=5, pady=2)
+        
+        ttk.Label(size_control_frame, text="點雲大小:").pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 實時點雲大小滑桿
+        self.live_point_size_var = tk.DoubleVar(value=self.point_size)
+        self.live_size_scale = ttk.Scale(size_control_frame, from_=0.1, to=5.0, 
+                                        variable=self.live_point_size_var, orient=tk.HORIZONTAL, length=150)
+        self.live_size_scale.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # 當前數值顯示
+        self.live_size_label = ttk.Label(size_control_frame, text=f"{self.point_size:.1f}")
+        self.live_size_label.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 快速大小設定按鈕
+        ttk.Button(size_control_frame, text="小", command=lambda: self._set_live_point_size(0.5)).pack(side=tk.LEFT, padx=1)
+        ttk.Button(size_control_frame, text="中", command=lambda: self._set_live_point_size(1.0)).pack(side=tk.LEFT, padx=1)
+        ttk.Button(size_control_frame, text="大", command=lambda: self._set_live_point_size(2.0)).pack(side=tk.LEFT, padx=1)
+        
+        # 綁定滑桿變更事件以實時更新點雲大小
+        def on_size_change(event=None):
+            new_size = self.live_point_size_var.get()
+            self.point_size = new_size
+            self.live_size_label.config(text=f"{new_size:.1f}")
+            # 實時更新顯示
+            self._update_visualization()
+        
+        self.live_size_scale.bind('<Motion>', on_size_change)
+        self.live_size_scale.bind('<ButtonRelease-1>', on_size_change)
         
         # 點雲數據控制
         cloud_frame = ttk.Frame(control_frame)
@@ -205,16 +253,231 @@ class MainWindow:
         vis_frame = ttk.LabelFrame(self.main_frame, text="數據可視化")
         vis_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
         
+        # 創建主要內容框架
+        content_frame = ttk.Frame(vis_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 左側：matplotlib圖表
+        chart_frame = ttk.Frame(content_frame)
+        chart_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
         # 創建圖表
         self.fig = Figure(figsize=(8, 6))
-        self.canvas = FigureCanvasTkAgg(self.fig, master=vis_frame)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=chart_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
         # 創建子圖
         self.ax1 = self.fig.add_subplot(121, projection='3d')
         self.ax2 = self.fig.add_subplot(122)
         
+        # 右側：顏色對照圖例和控制面板
+        legend_frame = ttk.LabelFrame(content_frame, text="距離顏色對照", width=200)
+        legend_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(5, 0))
+        legend_frame.pack_propagate(False)
+        
+        # 顏色對照表
+        self._create_color_legend(legend_frame)
+        
         self.fig.tight_layout()
+    
+    def _create_color_legend(self, parent_frame) -> None:
+        """創建顏色對照圖例"""
+        # 圖例說明
+        info_label = ttk.Label(parent_frame, 
+                              text="動態距離顏色對照表", 
+                              font=('Arial', 10, 'bold'))
+        info_label.pack(pady=5)
+        
+        # 當前比例尺狀態
+        self.scale_info_label = ttk.Label(parent_frame,
+                                         text=f"當前比例尺: {self.color_mapper.current_max_distance:.0f}米",
+                                         font=('Arial', 8),
+                                         foreground='blue')
+        self.scale_info_label.pack(pady=2)
+        
+        # 創建可滾動的顏色映射區域
+        self.legend_frame = ttk.Frame(parent_frame)
+        self.legend_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # 初始創建顏色映射
+        self._update_color_legend_display()
+        
+        # 分隔線
+        separator = ttk.Separator(parent_frame, orient='horizontal')
+        separator.pack(fill=tk.X, padx=5, pady=10)
+        
+        # 控制按鈕
+        ttk.Button(parent_frame, 
+                  text="設定顏色映射", 
+                  command=self._show_color_mapping_settings).pack(pady=2)
+        
+        ttk.Button(parent_frame, 
+                  text="比例尺設定", 
+                  command=self._show_color_scale_dialog).pack(pady=2)
+        
+        ttk.Button(parent_frame, 
+                  text="重置為預設", 
+                  command=self._reset_color_mapping).pack(pady=2)
+    
+    def _update_color_legend_display(self) -> None:
+        """更新顏色圖例顯示"""
+        # 清除舊的顯示
+        for widget in self.legend_frame.winfo_children():
+            widget.destroy()
+        
+        # 更新比例尺信息
+        if hasattr(self, 'scale_info_label'):
+            self.scale_info_label.config(text=f"當前比例尺: {self.color_mapper.current_max_distance:.0f}米")
+        
+        # 獲取顏色映射信息
+        legend_info = self.color_mapper.get_legend_info()
+        
+        # 創建顏色方塊和標籤
+        for range_text, color in legend_info:
+            range_frame = ttk.Frame(self.legend_frame)
+            range_frame.pack(fill=tk.X, pady=1)
+            
+            # 顏色方塊 (使用Canvas繪製)
+            color_canvas = tk.Canvas(range_frame, width=18, height=18, highlightthickness=0)
+            color_canvas.pack(side=tk.LEFT, padx=(0, 5))
+            
+            # 轉換顏色名稱為實際顏色
+            try:
+                # 創建一個小的顏色方塊
+                color_canvas.create_rectangle(0, 0, 18, 18, fill=color, outline='black')
+            except tk.TclError:
+                # 如果顏色名稱無效，使用灰色
+                color_canvas.create_rectangle(0, 0, 18, 18, fill='gray', outline='black')
+            
+            # 範圍標籤
+            range_label = ttk.Label(range_frame, text=range_text, font=('Arial', 8))
+            range_label.pack(side=tk.LEFT)
+    
+    def _show_color_mapping_settings(self) -> None:
+        """顯示顏色映射設定對話框"""
+        self.color_mapper.show_color_mapping_dialog(self.root)
+        # 重新更新可視化
+        self._update_visualization()
+    
+    def _reset_color_mapping(self) -> None:
+        """重置顏色映射為預設值"""
+        self.color_mapper = DistanceColorMapper()
+        self._log_message("已重置顏色映射為預設值")
+        self._update_visualization()
+    
+    def _refresh_color_legend(self) -> None:
+        """刷新顏色圖例顯示"""
+        # 這裡可以實現重新刷新圖例的邏輯，或者重新創建整個面板
+        pass
+    
+    def _show_color_scale_dialog(self) -> None:
+        """顯示顏色比例尺設定對話框"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("顏色比例尺設定")
+        dialog.geometry("400x300")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 主框架
+        main_frame = ttk.Frame(dialog)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # 說明
+        info_label = ttk.Label(main_frame, 
+                              text="設定顏色映射的最大距離比例尺\n顏色區間會根據此設定自動調整",
+                              font=('Arial', 10))
+        info_label.pack(pady=10)
+        
+        # 當前狀態
+        current_max = self.color_mapper.current_max_distance
+        status_label = ttk.Label(main_frame, 
+                                text=f"當前最大距離: {current_max:.1f}米",
+                                font=('Arial', 9))
+        status_label.pack(pady=5)
+        
+        # 比例尺設定
+        scale_frame = ttk.LabelFrame(main_frame, text="比例尺設定")
+        scale_frame.pack(fill=tk.X, pady=10)
+        
+        # 自動模式
+        auto_var = tk.BooleanVar(value=True)
+        auto_check = ttk.Checkbutton(scale_frame, text="自動根據數據調整比例尺", variable=auto_var)
+        auto_check.pack(anchor=tk.W, padx=5, pady=5)
+        
+        # 手動設定
+        manual_frame = ttk.Frame(scale_frame)
+        manual_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(manual_frame, text="手動設定最大距離:").pack(side=tk.LEFT)
+        max_distance_var = tk.DoubleVar(value=current_max)
+        max_distance_entry = ttk.Entry(manual_frame, textvariable=max_distance_var, width=10)
+        max_distance_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(manual_frame, text="米").pack(side=tk.LEFT)
+        
+        # 預設值按鈕
+        preset_frame = ttk.Frame(scale_frame)
+        preset_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        def set_preset(value):
+            max_distance_var.set(value)
+            auto_var.set(False)
+        
+        ttk.Button(preset_frame, text="200m", command=lambda: set_preset(200)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(preset_frame, text="500m", command=lambda: set_preset(500)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(preset_frame, text="1000m", command=lambda: set_preset(1000)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(preset_frame, text="2000m", command=lambda: set_preset(2000)).pack(side=tk.LEFT, padx=2)
+        
+        # 顏色預覽
+        preview_frame = ttk.LabelFrame(main_frame, text="顏色區間預覽")
+        preview_frame.pack(fill=tk.X, pady=10)
+        
+        self.preview_label = ttk.Label(preview_frame, text="", font=('Courier', 8))
+        self.preview_label.pack(padx=5, pady=5)
+        
+        def update_preview():
+            if auto_var.get():
+                preview_text = "自動模式：顏色區間將根據實際數據動態調整"
+            else:
+                max_dist = max_distance_var.get()
+                interval_size = max_dist / 5
+                preview_text = f"手動模式 (最大距離: {max_dist:.0f}m):\n"
+                colors = ['紅色', '橙色', '黃色', '綠色', '藍色']
+                for i in range(5):
+                    start = i * interval_size
+                    end = (i + 1) * interval_size if i < 4 else max_dist
+                    if i == 4:
+                        preview_text += f"{start:.0f}m+ : {colors[i]}\n"
+                    else:
+                        preview_text += f"{start:.0f}-{end:.0f}m : {colors[i]}\n"
+            
+            self.preview_label.config(text=preview_text)
+        
+        # 綁定更新事件
+        auto_var.trace('w', lambda *args: update_preview())
+        max_distance_var.trace('w', lambda *args: update_preview())
+        
+        # 初始預覽
+        update_preview()
+        
+        # 按鈕
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=10)
+        
+        def apply_settings():
+            if not auto_var.get():
+                # 手動模式：設定固定的最大距離
+                self.color_mapper.set_max_distance(max_distance_var.get())
+                self._log_message(f"設定顏色比例尺最大距離為 {max_distance_var.get():.0f}米")
+            else:
+                self._log_message("啟用自動顏色比例尺模式")
+            
+            # 重新更新可視化
+            self._update_visualization()
+            dialog.destroy()
+        
+        ttk.Button(button_frame, text="應用", command=apply_settings).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="取消", command=dialog.destroy).pack(side=tk.RIGHT)
     
     def _create_log_panel(self) -> None:
         pass  # 不再在主視窗顯示日誌
@@ -243,19 +506,21 @@ class MainWindow:
         # 如果有數據，繪製點雲
         if data is not None:
             if data.shape[1] >= 6:
-                # 真實掃描數據，直接用XYZ - 設置較小的點大小
-                self.ax1.scatter(data[:, 0], data[:, 1], data[:, 2], c=data[:, 3], cmap='viridis', s=0.5)
-                self.ax2.scatter(data[:, 0], data[:, 1], c=data[:, 3], cmap='viridis', s=0.5)
+                # 真實掃描數據，直接用XYZ - 使用新的顏色映射
+                self.color_mapper.plot_distance_colors(
+                    self.ax1, data[:, 3], data[:, 0], data[:, 1], data[:, 2], self.point_size)
+                self.color_mapper.plot_distance_colors(
+                    self.ax2, data[:, 3], data[:, 0], data[:, 1], None, self.point_size)
             else:
-                # 舊的測試數據，極座標轉換 - 設置較小的點大小
-                self.ax1.scatter(
-                    data[:, 0] * np.cos(data[:, 1]),
-                    data[:, 0] * np.sin(data[:, 1]),
-                    data[:, 2], c=data[:, 3], cmap='viridis', s=0.5)
-                self.ax2.scatter(
-                    data[:, 0] * np.cos(data[:, 1]),
-                    data[:, 0] * np.sin(data[:, 1]),
-                    c=data[:, 3], cmap='viridis', s=0.5)
+                # 舊的測試數據，極座標轉換 - 使用新的顏色映射
+                x_coords = data[:, 0] * np.cos(data[:, 1])
+                y_coords = data[:, 0] * np.sin(data[:, 1])
+                distances = data[:, 3]  # 假設第4列是距離
+                
+                self.color_mapper.plot_distance_colors(
+                    self.ax1, distances, x_coords, y_coords, data[:, 2], self.point_size)
+                self.color_mapper.plot_distance_colors(
+                    self.ax2, distances, x_coords, y_coords, None, self.point_size)
         else:
             # 沒有數據時，顯示提示信息
             if self.fixed_scale_enabled:
@@ -282,6 +547,10 @@ class MainWindow:
         
         # 添加座標箭頭（無論是否有數據都顯示）
         self._add_coordinate_arrows(self.ax1)
+        
+        # 更新顏色圖例顯示
+        if hasattr(self, 'legend_frame'):
+            self._update_color_legend_display()
         
         self.fig.tight_layout()
         self.canvas.draw()
@@ -320,7 +589,7 @@ class MainWindow:
         """顯示3D視圖設置對話框"""
         settings_window = tk.Toplevel(self.root)
         settings_window.title("3D視圖設置")
-        settings_window.geometry("500x400")  # 增加視窗高度以容納更多按鈕
+        settings_window.geometry("500x500")  # 增加視窗高度以容納點雲大小設定
         settings_window.resizable(False, False)
         
         # 使視窗置中
@@ -334,6 +603,47 @@ class MainWindow:
         self.scale_var = tk.BooleanVar(value=self.fixed_scale_enabled)
         scale_check = ttk.Checkbutton(scale_frame, text="啟用固定比例尺", variable=self.scale_var)
         scale_check.pack(anchor=tk.W, padx=5, pady=5)
+        
+        # 點雲大小設定
+        point_size_frame = ttk.LabelFrame(settings_window, text="點雲顯示設定")
+        point_size_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # 點雲大小滑桿
+        size_control_frame = ttk.Frame(point_size_frame)
+        size_control_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(size_control_frame, text="點雲大小:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.point_size_var = tk.DoubleVar(value=self.point_size)
+        size_scale = ttk.Scale(size_control_frame, from_=0.1, to=10.0, 
+                              variable=self.point_size_var, orient=tk.HORIZONTAL, length=200)
+        size_scale.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # 顯示當前數值
+        self.size_label = ttk.Label(size_control_frame, text=f"{self.point_size:.1f}")
+        self.size_label.pack(side=tk.LEFT)
+        
+        # 綁定滑桿變更事件以實時更新數值顯示
+        def update_size_label(event=None):
+            self.size_label.config(text=f"{self.point_size_var.get():.1f}")
+        
+        size_scale.bind('<Motion>', update_size_label)
+        size_scale.bind('<Button-1>', update_size_label)
+        size_scale.bind('<ButtonRelease-1>', update_size_label)
+        
+        # 快速設定按鈕
+        size_quick_frame = ttk.Frame(point_size_frame)
+        size_quick_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        def set_point_size(size):
+            self.point_size_var.set(size)
+            update_size_label()
+        
+        ttk.Button(size_quick_frame, text="極小(0.1)", command=lambda: set_point_size(0.1)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(size_quick_frame, text="小(0.5)", command=lambda: set_point_size(0.5)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(size_quick_frame, text="中(1.0)", command=lambda: set_point_size(1.0)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(size_quick_frame, text="大(2.0)", command=lambda: set_point_size(2.0)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(size_quick_frame, text="特大(5.0)", command=lambda: set_point_size(5.0)).pack(side=tk.LEFT, padx=2)
         
         # 軸範圍設定
         range_frame = ttk.LabelFrame(settings_window, text="軸範圍設定 (米)")
@@ -409,6 +719,7 @@ class MainWindow:
         
         def apply_settings():
             self.fixed_scale_enabled = self.scale_var.get()
+            self.point_size = self.point_size_var.get()  # 應用點雲大小設定
             self.x_range = [self.x_min_var.get(), self.x_max_var.get()]
             self.y_range = [self.y_min_var.get(), self.y_max_var.get()]
             self.z_range = [self.z_min_var.get(), self.z_max_var.get()]
@@ -422,7 +733,7 @@ class MainWindow:
             # 立即重新繪製（無論是否有數據都要更新）
             self._update_visualization()
             
-            self._log_message(f"3D視圖設置已更新: X={self.x_range}, Y={self.y_range}, Z={self.z_range}")
+            self._log_message(f"3D視圖設置已更新: X={self.x_range}, Y={self.y_range}, Z={self.z_range}, 點雲大小={self.point_size}")
             settings_window.destroy()
         
         ttk.Button(button_frame, text="應用", command=apply_settings).pack(side=tk.RIGHT, padx=5)
@@ -872,4 +1183,12 @@ class MainWindow:
         except Exception as e:
             self._log_message(f"[角度重置錯誤] {e}")
         
+        self._update_visualization() 
+
+    def _set_live_point_size(self, size):
+        """設定實時點雲大小"""
+        self.live_point_size_var.set(size)
+        self.point_size = size
+        self.live_size_label.config(text=f"{size:.1f}")
+        # 實時更新顯示
         self._update_visualization() 

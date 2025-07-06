@@ -42,3 +42,5 @@ setstopmask             Set stop mask.  setstopmask [state]
 showstopmask            Show stop mask setting. showstopmask
 setechonum              Set which echo to be shown.     setechonum
 setsteptop              Set step motor top position.    setsteptop
+
+14253
